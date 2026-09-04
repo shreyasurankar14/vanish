@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vanish — an invisibility console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #180c0f;
+    --panel: #241318;
+    --panel-edge: rgba(201,162,77,0.22);
+    --accent: #c9a24d;
+    --accent-soft: #8a6a2f;
+    --text: #f2e8d5;
+    --text-muted: #a08b7a;
+    --ok: #82a878;
+    --warn: #b5603f;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: radial-gradient(120% 140% at 50% -10%, #2a1620 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+  body{
+    display:flex; flex-direction:column; align-items:center;
+    padding: 48px 20px 64px;
+  }
+  h1{
+    font-family:'Fraunces', Georgia, serif;
+    font-style: italic;
+    font-weight: 600;
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
+    letter-spacing: -0.01em;
+    margin: 0 0 8px;
+    color: var(--text);
+  }
+  .subtitle{
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    margin: 0 0 40px;
+    text-align:center;
+    max-width: 480px;
+    line-height:1.5;
+  }
+  .stage{ width:100%; max-width: 640px; display:flex; flex-direction:column; align-items:center; }
+
+  .viewfinder{
+    position:relative;
+    width:100%;
+    aspect-ratio: 4 / 3;
+    background:#0c0608;
+    border-radius: 4px;
+    overflow:hidden;
+    box-shadow: 0 0 0 1px var(--panel-edge), 0 30px 60px -20px rgba(0,0,0,0.6);
+  }
+  .viewfinder canvas{
+    width:100%; height:100%; display:block; object-fit:cover;
+    cursor: crosshair;
+  }
+  .viewfinder .placeholder{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color: var(--text-muted); font-size:0.85rem; text-align:center; padding: 0 30px;
+  }
+  .corner{ position:absolute; width:26px; height:26px; border-color: var(--accent); opacity:0.85; }
+  .corner.tl{ top:10px; left:10px; border-top:2px solid; border-left:2px solid; }
+  .corner.tr{ top:10px; right:10px; border-top:2px solid; border-right:2px solid; }
+  .corner.bl{ bottom:10px; left:10px; border-bottom:2px solid; border-left:2px solid; }
+  .corner.br{ bottom:10px; right:10px; border-bottom:2px solid; border-right:2px solid; }
+
+  .status-row{
+    display:flex; align-items:center; gap:10px;
+    margin: 18px 0 34px;
+    font-size:0.85rem;
+    color: var(--text-muted);
+    text-align:center;
+  }
+  .status-dot{
+    width:8px; height:8px; border-radius:50%;
+    background: #5a4a44;
+    transition: background-color 0.3s ease;
+    flex-shrink:0;
+  }
+  .status-dot.on{ background: var(--warn); }
+  .status-dot.locked{ background: var(--ok); }
+
+  .steps{
+    width:100%;
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  @media (max-width: 560px){
+    .steps{ grid-template-columns: 1fr; }
+  }
+  .step{
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 4px;
+    padding: 16px 16px 18px;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .step-head{ display:flex; align-items:center; gap:10px; }
+  .step-num{
+    width:20px; height:20px; border-radius:50%;
+    border:1px solid var(--accent);
+    color: var(--accent);
+    font-size:0.72rem;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .step-title{ color: var(--text); font-size:0.82rem; }
+  .step-help{ color: var(--text-muted); font-size:0.76rem; line-height:1.5; margin:0; }
+
+  button{
+    font-family: inherit;
+    font-size: 0.8rem;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent-soft);
+    border-radius: 3px;
+    padding: 9px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  button:hover:not(:disabled){ background: rgba(201,162,77,0.12); }
+  button:disabled{ opacity:0.35; cursor:not-allowed; }
+  button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  .swatch{
+    display:inline-block; width:12px; height:12px; border-radius:2px;
+    vertical-align:middle; margin-right:6px;
+    border:1px solid rgba(255,255,255,0.25);
+  }
+
+  input[type="range"]{
+    width:100%;
+    accent-color: var(--accent);
+  }
+  .range-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .range-row span{ color: var(--text-muted); font-size:0.72rem; }
+
+  .footnote{
+    margin-top: 36px;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+    text-align:center;
+    max-width: 480px;
+    line-height:1.6;
+  }
+  .footnote a{ color: var(--accent); }
+
+  @media (prefers-reduced-motion: reduce){
+    .status-dot{ transition: none; }
+  }
+</style>
+</head>
+<body>
+
+  <h1>Vanish</h1>
+  <p class="subtitle">Hold up a solid-colored cloth in front of your camera, lock onto its color, and watch it turn into a window onto whatever is behind you.</p>
+
+  <div class="stage">
+    <div class="viewfinder" id="viewfinder">
+      <p class="placeholder" id="placeholder">Your camera feed appears here once you turn it on.</p>
+      <video id="video" autoplay playsinline muted style="display:none;"></video>
+      <canvas id="output"></canvas>
+      <span class="corner tl"></span>
+      <span class="corner tr"></span>
+      <span class="corner bl"></span>
+      <span class="corner br"></span>
+    </div>
+
+    <div class="status-row" role="status" aria-live="polite">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Turn on your camera to begin.</span>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-head"><span class="step-num">1</span><span class="step-title">Turn on camera</span></div>
+        <p class="step-help">Give the page permission to use your camera.</p>
+        <button id="btnStart">Start camera</button>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-num">2</span><span class="step-title">Capture backdrop</span></div>
+        <p class="step-help">Stand where you'll be, then capture the scene — this is what shows through the cloth.</p>
+        <button id="btnCapture" disabled>Capture backdrop</button>
+      </div>
+
+      <div class="step">
+        <div class="step-head"><span class="step-num">3</span><span class="step-title">Lock the cloth</span></div>
+        <p class="step-help">Hold your cloth up and click it in the frame above.</p>
+        <div>
+          <span class="swatch" id="swatch" style="background:#3a3a3a;"></span>
+          <span id="colorLabel" style="color:var(--text-muted); font-size:0.76rem;">no color locked</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" style="width:100%; margin-top:18px;">
+      <div class="step-head"><span class="step-title">Sensitivity</span></div>
+      <div class="range-row">
+        <input type="range" id="tolerance" min="10" max="120" value="45">
+        <span id="toleranceVal">45</span>
+      </div>
+      <p class="step-help">Lower catches only an exact match. Higher forgives wrinkles and shadows in the cloth — but risks eating similar colors nearby.</p>
+    </div>
+  </div>
+
+  <p class="footnote">
+    Everything happens locally in your browser — no video ever leaves your device. If the camera won't start, this page may be running inside a restricted preview; try opening the file directly in a browser tab.
+  </p>
+
+<script>
+(function(){
+  const video = document.getElementById('video');
+  const output = document.getElementById('output');
+  const placeholder = document.getElementById('placeholder');
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const btnStart = document.getElementById('btnStart');
+  const btnCapture = document.getElementById('btnCapture');
+  const swatch = document.getElementById('swatch');
+  const colorLabel = document.getElementById('colorLabel');
+  const toleranceInput = document.getElementById('tolerance');
+  const toleranceVal = document.getElementById('toleranceVal');
+
+  const outCtx = output.getContext('2d', { willReadFrequently: true });
+  const liveCanvas = document.createElement('canvas');
+  const liveCtx = liveCanvas.getContext('2d', { willReadFrequently: true });
+  const bgCanvas = document.createElement('canvas');
+  const bgCtx = bgCanvas.getContext('2d', { willReadFrequently: true });
+
+  let width = 0, height = 0;
+  let running = false;
+  let bgData = null;
+  let lastFrameData = null;
+  let target = null; // {r,g,b}
+  let tolerance = 45;
+
+  toleranceInput.addEventListener('input', () => {
+    tolerance = parseInt(toleranceInput.value, 10);
+    toleranceVal.textContent = tolerance;
+  });
+
+  function setStatus(text, dotState){
+    statusText.textContent = text;
+    statusDot.className = 'status-dot' + (dotState ? ' ' + dotState : '');
+  }
+
+  async function startCamera(){
+    btnStart.disabled = true;
+    setStatus('Requesting camera access…', 'on');
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      video.srcObject = stream;
+      await video.play();
+
+      width = video.videoWidth || 640;
+      height = video.videoHeight || 480;
+      output.width = width; output.height = height;
+      liveCanvas.width = width; liveCanvas.height = height;
+      bgCanvas.width = width; bgCanvas.height = height;
+
+      placeholder.style.display = 'none';
+      btnCapture.disabled = false;
+      running = true;
+      setStatus('Camera is live. Stand where you\u2019ll be, then capture the backdrop.', 'on');
+      requestAnimationFrame(tick);
+
+      window.addEventListener('beforeunload', () => {
+        stream.getTracks().forEach(t => t.stop());
+      });
+    }catch(err){
+      btnStart.disabled = false;
+      setStatus('Camera access was blocked. Open this file directly in a browser tab and allow the camera when prompted.');
+    }
+  }
+
+  function drawMirroredVideoTo(ctx){
+    ctx.save();
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, width, height);
+    ctx.restore();
+  }
+
+  function captureBackdrop(){
+    if (!running) return;
+    drawMirroredVideoTo(bgCtx);
+    bgData = bgCtx.getImageData(0, 0, width, height);
+    setStatus('Backdrop captured. Hold up your cloth and click it in the frame.', 'on');
+  }
+
+  function tick(){
+    if (!running){ return; }
+    drawMirroredVideoTo(liveCtx);
+    lastFrameData = liveCtx.getImageData(0, 0, width, height);
+
+    if (bgData && target){
+      const out = outCtx.createImageData(width, height);
+      const live = lastFrameData.data;
+      const bg = bgData.data;
+      const dst = out.data;
+      const tr = target.r, tg = target.g, tb = target.b;
+      const innerT2 = tolerance * tolerance;
+      const outerT = tolerance * 1.4;
+      const outerT2 = outerT * outerT;
+      const span = outerT2 - innerT2;
+
+      for (let i = 0; i < live.length; i += 4){
+        const dr = live[i] - tr, dg = live[i+1] - tg, db = live[i+2] - tb;
+        const distSq = dr*dr + dg*dg + db*db;
+        let alpha;
+        if (distSq <= innerT2) alpha = 1;
+        else if (distSq >= outerT2) alpha = 0;
+        else alpha = 1 - (distSq - innerT2) / span;
+
+        dst[i]   = live[i]   * (1 - alpha) + bg[i]   * alpha;
+        dst[i+1] = live[i+1] * (1 - alpha) + bg[i+1] * alpha;
+        dst[i+2] = live[i+2] * (1 - alpha) + bg[i+2] * alpha;
+        dst[i+3] = 255;
+      }
+      outCtx.putImageData(out, 0, 0);
+    } else {
+      outCtx.putImageData(lastFrameData, 0, 0);
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  output.addEventListener('click', (evt) => {
+    if (!lastFrameData) return;
+    if (!bgData){
+      setStatus('Capture the backdrop first, then click your cloth.', 'on');
+      return;
+    }
+    const rect = output.getBoundingClientRect();
+    const x = Math.floor((evt.clientX - rect.left) * (width / rect.width));
+    const y = Math.floor((evt.clientY - rect.top) * (height / rect.height));
+    const idx = (y * width + x) * 4;
+    const data = lastFrameData.data;
+    target = { r: data[idx], g: data[idx+1], b: data[idx+2] };
+
+    swatch.style.background = `rgb(${target.r}, ${target.g}, ${target.b})`;
+    colorLabel.textContent = `locked on rgb(${target.r}, ${target.g}, ${target.b})`;
+    setStatus('Cloth locked. Move it anywhere in frame — the backdrop shows through.', 'locked');
+  });
+
+  btnStart.addEventListener('click', startCamera);
+  btnCapture.addEventListener('click', captureBackdrop);
+})();
+</script>
+</body>
+</html>
